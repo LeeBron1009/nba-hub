@@ -278,7 +278,7 @@ function gameLogHtml(g,pid,sched,teamId){
  return `<div class="card"><b>${t("gameLog")}</b><div class="scroll" style="margin-top:6px"><table><tr><th>${t("date")}</th><th>${t("opp")}</th><th>${t("result")}</th>${g.labels.map(l=>`<th>${l}</th>`).join("")}<th>+/-</th></tr>`+
  rows.map(r=>{
   const m=r.meta,d=new Date(m.gameDate);
-  const opp=m.opponent?tn(m.opponent.abbreviation,m.opponent.displayName):"";
+    const opp=m.opponent?(lang==="zh"?tn(m.opponent.abbreviation,m.opponent.displayName):(m.opponent.abbreviation||m.opponent.displayName)):"";
   const w=m.gameResult==="W";
   return `<tr><td>${isNaN(d)?"":d.toLocaleDateString(loc,{month:"numeric",day:"numeric"})}</td><td>${m.atVs||""} ${opp}</td><td class="${w?"win":"lose"}">${m.gameResult||""} ${m.score||""}</td>${r.stats.map(v=>`<td>${v}</td>`).join("")}${r.dnp?`<td>-</td>`:`<td class="pm" data-ev="${r.eventId}">…</td>`}</tr>`;
  }).join("")+`</table></div></div>`;
