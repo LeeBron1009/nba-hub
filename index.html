@@ -231,10 +231,11 @@ async function pgPlayer(id){
   h+=`<div class="card"><b>${t("seasonStats")}</b><div class="scroll"><table><tr><th></th>${s.labels.map(l=>`<th>${l}</th>`).join("")}</tr>`+
   s.splits.map(sp=>`<tr><td>${t(sp.displayName)}</td>${sp.stats.map(v=>`<td>${v}</td>`).join("")}</tr>`).join("")+`</table></div></div>`;
  }
- h+=gameLogHtml(g);
+ h+=gameLogHtml(g,id);
  $.innerHTML=h;
+ fillPM(id);
 }
-function gameLogHtml(g){
+function gameLogHtml(g,pid){
  const none=`<div class="card"><b>${t("gameLog")}</b><p style="margin-top:6px;color:#9ab">${t("nolog")}</p></div>`;
  if(!g||!g.labels||!g.events)return none;
  const rows=[];
@@ -242,20 +243,49 @@ function gameLogHtml(g){
   if(/post|pre/i.test(stp.displayName||""))return;
   (stp.categories||[]).forEach(cat=>{
    (cat.events||[]).forEach(ev=>{
-    const meta=g.events[ev.eventId];if(meta)rows.push({meta,stats:ev.stats});
+    const meta=g.events[ev.eventId];if(meta)rows.push({meta,stats:ev.stats,eventId:ev.eventId});
    });
   });
  });
  rows.sort((x,y)=>new Date(y.meta.gameDate||0)-new Date(x.meta.gameDate||0));
  if(!rows.length)return none;
  const loc=lang==="zh"?"zh-TW":"en-US";
- return `<div class="card"><b>${t("gameLog")}</b><div class="scroll" style="margin-top:6px"><table><tr><th>${t("date")}</th><th>${t("opp")}</th><th>${t("result")}</th>${g.labels.map(l=>`<th>${l}</th>`).join("")}</tr>`+
+ return `<div class="card"><b>${t("gameLog")}</b><div class="scroll" style="margin-top:6px"><table><tr><th>${t("date")}</th><th>${t("opp")}</th><th>${t("result")}</th>${g.labels.map(l=>`<th>${l}</th>`).join("")}<th>+/-</th></tr>`+
  rows.map(r=>{
   const m=r.meta,d=new Date(m.gameDate);
   const opp=m.opponent?tn(m.opponent.abbreviation,m.opponent.displayName):"";
   const w=m.gameResult==="W";
-  return `<tr><td>${isNaN(d)?"":d.toLocaleDateString(loc,{month:"numeric",day:"numeric"})}</td><td>${m.atVs||""} ${opp}</td><td class="${w?"win":"lose"}">${m.gameResult||""} ${m.score||""}</td>${r.stats.map(v=>`<td>${v}</td>`).join("")}</tr>`;
+  return `<tr><td>${isNaN(d)?"":d.toLocaleDateString(loc,{month:"numeric",day:"numeric"})}</td><td>${m.atVs||""} ${opp}</td><td class="${w?"win":"lose"}">${m.gameResult||""} ${m.score||""}</td>${r.stats.map(v=>`<td>${v}</td>`).join("")}<td class="pm" data-ev="${r.eventId}">…</td></tr>`;
  }).join("")+`</table></div></div>`;
+}
+
+const pmCache={};
+function findPM(d,pid){
+ for(const tp of (d.boxscore?.players||[])){
+  const st=tp.statistics?.[0];if(!st)continue;
+  const idx=st.labels.indexOf("+/-");
+  const a=st.athletes.find(x=>String(x.athlete.id)===String(pid));
+  if(a&&idx>=0&&a.stats[idx]!==undefined)return a.stats[idx];
+ }
+ return null;
+}
+function setPM(c,v){
+ c.textContent=v||"-";
+ c.className="pm "+(v&&String(v).startsWith("+")?"win":v&&String(v).startsWith("-")?"lose":"");
+}
+async function fillPM(pid){
+ const ids=[...new Set([...document.querySelectorAll(".pm")].map(c=>c.dataset.ev))];
+ let i=0;
+ async function worker(){
+  while(i<ids.length){
+   const ev=ids[i++],key=pid+"_"+ev;
+   if(!(key in pmCache)){
+    try{pmCache[key]=findPM(await get(`${API}/summary?event=${ev}`),pid)}catch(e){pmCache[key]=null}
+   }
+   document.querySelectorAll(`.pm[data-ev="${ev}"]`).forEach(c=>setPM(c,pmCache[key]));
+  }
+ }
+ await Promise.all([worker(),worker(),worker(),worker()]);
 }
 
 /* NEWS */
