@@ -9,10 +9,10 @@
 body{background:#10131a;color:#eee;padding-bottom:70px}
 header{position:sticky;top:0;background:#1b2130;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;z-index:5}
 header h1{font-size:18px}
-#lang{background:#c8102e;color:#fff;border:0;padding:6px 12px;border-radius:14px;font-weight:bold}
+#lang{background:#c8102e;color:#fff;border:0;padding:6px 12px;border-radius:14px;font-weight:bold;cursor:pointer}
 main{padding:12px;max-width:700px;margin:auto}
 nav{position:fixed;bottom:0;left:0;right:0;background:#1b2130;display:flex;z-index:5}
-nav button{flex:1;padding:12px 0;background:none;border:0;color:#999;font-size:13px}
+nav button{flex:1;padding:12px 0;background:none;border:0;color:#999;font-size:13px;cursor:pointer}
 nav button.on{color:#fff;border-top:3px solid #c8102e}
 .card{background:#1b2130;border-radius:12px;padding:12px;margin-bottom:10px}
 .game{cursor:pointer}
@@ -23,18 +23,23 @@ nav button.on{color:#fff;border-top:3px solid #c8102e}
 .st{font-size:12px;color:#8fa;margin-bottom:4px}
 .live{color:#ff5a5a}
 input{width:100%;padding:10px;border-radius:10px;border:0;margin-bottom:10px;background:#252c3d;color:#fff;font-size:15px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:5px 4px;text-align:right}
+table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+td,th{padding:5px 6px;text-align:right}
 td:first-child,th:first-child{text-align:left}
 .scroll{overflow-x:auto}
-.tabs button{background:#252c3d;color:#ccc;border:0;padding:6px 12px;border-radius:14px;margin:0 4px 8px 0}
+.tabs{display:flex;gap:8px;margin-bottom:10px}
+.tabs button{flex:1;background:#252c3d;color:#ccc;border:0;padding:10px;border-radius:12px;font-size:15px;font-weight:bold;cursor:pointer}
 .tabs button.on{background:#c8102e;color:#fff}
+.nb{background:#252c3d;color:#fff;border:0;padding:8px;border-radius:8px;cursor:pointer}
 a{color:#7cc4ff}
 .news img{width:100%;border-radius:8px;margin-bottom:6px}
-.back{background:none;border:0;color:#7cc4ff;margin-bottom:8px;font-size:15px}
+.back{background:none;border:0;color:#7cc4ff;margin-bottom:8px;font-size:15px;cursor:pointer}
 .big{display:flex;align-items:center;gap:12px}
 .big img{width:70px;height:70px;border-radius:50%;background:#252c3d;object-fit:cover}
 .err{color:#f88;padding:20px;text-align:center}
+.err small{display:block;color:#a66;margin-top:6px}
+.win{color:#5f5}.lose{color:#f77}
+.top6{color:#ffd24d;font-weight:bold}.mid{color:#bcd}
 </style>
 </head>
 <body>
@@ -45,34 +50,36 @@ a{color:#7cc4ff}
 <script>
 const T={
 en:{scores:"Scores",standings:"Standings",teams:"Teams",players:"Players",news:"News",
- prev:"◀ Prev",next:"Next ▶",today:"Today",loading:"Loading...",err:"Failed to load data. Check your network.",
+ prev:"◀ Prev",next:"Next ▶",loading:"Loading...",err:"Failed to load data. Check your network.",
  nogame:"No games on this day.",live:"LIVE",final:"Final",back:"← Back",search:"Search player (e.g. LeBron)",
  east:"Eastern",west:"Western",team:"Team",w:"W",l:"L",pct:"PCT",gb:"GB",streak:"Streak",
- box:"Box Score",leaders:"Leaders",roster:"Roster",seasonStats:"Season Stats",pos:"Pos",age:"Age",ht:"Height",
- noresult:"No result.",injuries:"Injuries",readmore:"Read more",min:"MIN",pts:"PTS",reb:"REB",ast:"AST",
- stl:"STL",blk:"BLK",to:"TO",auto:"Auto refresh every 30s",tapNote:"Tap a game for details"},
+ box:"Box Score",roster:"Roster",seasonStats:"Season Stats",gameLog:"Game Log (This Season)",pos:"Pos",age:"Age",ht:"Height",
+ noresult:"No result.",readmore:"Read more",auto:"Auto refresh every 30s",tapNote:"Tap a game for details",
+ date:"Date",opp:"OPP",result:"Result",nolog:"No game log available.",
+ "Regular Season":"Regular Season","Career":"Career"},
 zh:{scores:"比分",standings:"排名",teams:"球隊",players:"球員",news:"新聞",
- prev:"◀ 前一天",next:"後一天 ▶",today:"今天",loading:"載入中...",err:"資料載入失敗，請檢查網路。",
- nogame:"這天沒有比賽。",live:"進行中",final:"結束",back:"← 返回",search:"搜尋球員（例如 LeBron）",
+ prev:"◀ 前一天",next:"後一天 ▶",loading:"載入中...",err:"資料載入失敗，請檢查網路。",
+ nogame:"這天沒有比賽。",live:"進行中",final:"終了",back:"← 返回",search:"搜尋球員（例如 LeBron）",
  east:"東區",west:"西區",team:"球隊",w:"勝",l:"敗",pct:"勝率",gb:"勝差",streak:"連勝/連敗",
- box:"球員數據",leaders:"數據王",roster:"陣容",seasonStats:"賽季數據",pos:"位置",age:"年齡",ht:"身高",
- noresult:"找不到結果。",injuries:"傷兵",readmore:"閱讀全文",min:"時間",pts:"得分",reb:"籃板",ast:"助攻",
- stl:"抄截",blk:"阻攻",to:"失誤",auto:"每 30 秒自動更新",tapNote:"點選比賽看詳細資料"}
+ box:"球員數據",roster:"陣容",seasonStats:"賽季數據",gameLog:"本賽季逐場表現",pos:"位置",age:"年齡",ht:"身高",
+ noresult:"找不到結果。",readmore:"閱讀全文",auto:"每 30 秒自動更新",tapNote:"點選比賽看詳細資料",
+ date:"日期",opp:"對手",result:"結果",nolog:"目前沒有逐場資料。",
+ "Regular Season":"例行賽","Career":"生涯"}
 };
 const TEAMZH={ATL:"老鷹",BOS:"塞爾提克",BKN:"籃網",CHA:"黃蜂",CHI:"公牛",CLE:"騎士",DAL:"獨行俠",DEN:"金塊",DET:"活塞",GS:"勇士",GSW:"勇士",HOU:"火箭",IND:"溜馬",LAC:"快艇",LAL:"湖人",MEM:"灰熊",MIA:"熱火",MIL:"公鹿",MIN:"灰狼",NO:"鵜鶘",NOP:"鵜鶘",NY:"尼克",NYK:"尼克",OKC:"雷霆",ORL:"魔術",PHI:"七六人",PHX:"太陽",POR:"拓荒者",SAC:"國王",SA:"馬刺",SAS:"馬刺",TOR:"暴龍",UTA:"爵士",UTAH:"爵士",WSH:"巫師",WAS:"巫師"};
 const POSZH={PG:"控球後衛",SG:"得分後衛",SF:"小前鋒",PF:"大前鋒",C:"中鋒",G:"後衛",F:"前鋒"};
-const STATZH={"Points Per Game":"場均得分","Rebounds Per Game":"場均籃板","Assists Per Game":"場均助攻","Steals Per Game":"場均抄截","Blocks Per Game":"場均阻攻","Field Goal Percentage":"投籃命中率","Three Point Percentage":"三分命中率","Free Throw Percentage":"罰球命中率","Games Played":"出賽","Minutes Per Game":"場均時間","Points":"得分","Rebounds":"籃板","Assists":"助攻","Steals":"抄截","Blocks":"阻攻"};
-const STATUSZH={"Scheduled":"未開打","Final":"結束","Halftime":"中場休息","In Progress":"進行中","Postponed":"延期","Canceled":"取消","End of Period":"節間休息"};
 
 let lang=localStorage.getItem("nbaLang")||"en";
-let tab="scores",date=new Date(),timer=null,view=null;
+let tab="scores",date=new Date(),timer=null,view=null,conf="east";
 const t=k=>T[lang][k]||k;
 const tn=(abbr,name)=>lang==="zh"&&TEAMZH[abbr]?TEAMZH[abbr]:name;
 const API="https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+const STAND="https://site.api.espn.com/apis/v2/sports/basketball/nba/standings";
 const $=document.getElementById("app");
 
-async function get(u){const r=await fetch(u);if(!r.ok)throw 0;return r.json()}
+async function get(u){const r=await fetch(u);if(!r.ok)throw new Error("HTTP "+r.status);return r.json()}
 const ymd=d=>d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+const showErr=e=>{$.innerHTML=`<div class="err">${t("err")}<small>${e&&e.message?e.message:""}</small></div>`};
 
 function toggleLang(){lang=lang==="en"?"zh":"en";localStorage.setItem("nbaLang",lang);document.documentElement.lang=lang==="zh"?"zh-Hant":"en";render()}
 function drawNav(){
@@ -85,18 +92,18 @@ function render(){
  clearInterval(timer);drawNav();
  $.innerHTML=`<div class="card">${t("loading")}</div>`;
  const f={scores:pgScores,standings:pgStandings,teams:pgTeams,players:pgPlayers,news:pgNews}[tab];
- f().catch(()=>{$.innerHTML=`<div class="err">${t("err")}</div>`});
+ f().catch(showErr);
 }
 
 /* SCORES */
 async function pgScores(){
- if(view){return pgGame(view)}
+ if(view)return pgGame(view);
  const load=async()=>{
   const d=await get(`${API}/scoreboard?dates=${ymd(date)}`);
   const ev=d.events||[];
-  let h=`<div class="row"><button class="tabs" style="background:#252c3d;color:#fff;border:0;padding:8px;border-radius:8px" onclick="shift(-1)">${t("prev")}</button>
-   <b onclick="date=new Date();render()">${date.toLocaleDateString(lang==="zh"?"zh-TW":"en-US",{month:"short",day:"numeric",weekday:"short"})}</b>
-   <button style="background:#252c3d;color:#fff;border:0;padding:8px;border-radius:8px" onclick="shift(1)">${t("next")}</button></div>
+  let h=`<div class="row"><button class="nb" onclick="shift(-1)">${t("prev")}</button>
+   <b style="cursor:pointer" onclick="date=new Date();render()">${date.toLocaleDateString(lang==="zh"?"zh-TW":"en-US",{month:"short",day:"numeric",weekday:"short"})}</b>
+   <button class="nb" onclick="shift(1)">${t("next")}</button></div>
    <p style="font-size:12px;color:#889;margin:6px 0">${t("auto")} · ${t("tapNote")}</p>`;
   if(!ev.length)h+=`<div class="card">${t("nogame")}</div>`;
   h+=ev.map(e=>{
@@ -132,33 +139,47 @@ async function pgGame(id){
 
 /* STANDINGS */
 async function pgStandings(){
- const d=await get("https://site.api.espn.com/apis/v2/sports/basketball/nba/standings");
- let h="";
- (d.children||[]).forEach(conf=>{
-  const name=/east/i.test(conf.name)?t("east"):t("west");
-  const en=conf.standings.entries.slice().sort((a,b)=>{
-   const g=x=>+(x.stats.find(s=>s.name==="playoffSeed")?.value||99);return g(a)-g(b)});
-  const gs=(e,n)=>e.stats.find(s=>s.name===n)?.displayValue??"-";
-  h+=`<div class="card"><b>${name}</b><div class="scroll"><table><tr><th>${t("team")}</th><th>${t("w")}</th><th>${t("l")}</th><th>${t("pct")}</th><th>${t("gb")}</th><th>${t("streak")}</th></tr>`+
-  en.map((e,i)=>`<tr><td>${i+1}. <img src="${e.team.logos?.[0]?.href||""}" width="18" style="vertical-align:middle"> ${tn(e.team.abbreviation,e.team.shortDisplayName)}</td><td>${gs(e,"wins")}</td><td>${gs(e,"losses")}</td><td>${gs(e,"winPercent")}</td><td>${gs(e,"gamesBehind")}</td><td>${gs(e,"streak")}</td></tr>`).join("")+`</table></div></div>`;
- });
- $.innerHTML=h||`<div class="card">${t("nogame")}</div>`;
+ const d=await get(STAND);
+ const kids=d.children||[];
+ const c=kids.find(k=>conf==="east"?/east/i.test(k.name):/west/i.test(k.name))||kids[0];
+ const gs=(e,n)=>e.stats.find(s=>s.name===n)?.displayValue??"-";
+ const seed=x=>+(x.stats.find(s=>s.name==="playoffSeed")?.value||99);
+ const en=c.standings.entries.slice().sort((a,b)=>seed(a)-seed(b));
+ let h=`<div class="tabs"><button class="${conf==="east"?"on":""}" onclick="conf='east';render()">${t("east")}</button>
+  <button class="${conf==="west"?"on":""}" onclick="conf='west';render()">${t("west")}</button></div>
+  <div class="card"><div class="scroll"><table><tr><th>${t("team")}</th><th>${t("w")}</th><th>${t("l")}</th><th>${t("pct")}</th><th>${t("gb")}</th><th>${t("streak")}</th></tr>`+
+ en.map((e,i)=>`<tr><td><span class="${i<6?"top6":i<10?"mid":""}">${i+1}.</span> <img src="${e.team.logos?.[0]?.href||""}" width="18" style="vertical-align:middle"> ${tn(e.team.abbreviation,e.team.shortDisplayName)}</td><td>${gs(e,"wins")}</td><td>${gs(e,"losses")}</td><td>${gs(e,"winPercent")}</td><td>${gs(e,"gamesBehind")}</td><td>${gs(e,"streak")}</td></tr>`).join("")+`</table></div></div>`;
+ $.innerHTML=h;
 }
 
 /* TEAMS */
+async function getTeams(){
+ try{
+  const d=await get(STAND);
+  const out=[];
+  (d.children||[]).forEach(c=>c.standings.entries.forEach(e=>out.push(e.team)));
+  if(out.length)return out;
+ }catch(e){}
+ const d=await get(`${API}/teams`);
+ return d.sports[0].leagues[0].teams.map(x=>x.team);
+}
 async function pgTeams(){
  if(view)return pgTeam(view);
- const d=await get(`${API}/teams`);
- const ts=d.sports[0].leagues[0].teams.map(x=>x.team);
+ const ts=(await getTeams()).sort((a,b)=>(a.displayName||"").localeCompare(b.displayName||""));
  $.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">`+ts.map(x=>`<div class="card game" style="text-align:center" onclick="view='${x.id}';render()"><img src="${x.logos?.[0]?.href||""}" width="48"><div>${tn(x.abbreviation,x.displayName)}</div></div>`).join("")+`</div>`;
 }
 async function pgTeam(id){
- const [r,tm]=await Promise.all([get(`${API}/teams/${id}/roster`),get(`${API}/teams/${id}`)]);
- const x=tm.team;
+ let tm=null,ath=[];
+ try{tm=(await get(`${API}/teams/${id}`)).team}catch(e){}
+ try{ath=(await get(`${API}/teams/${id}/roster`)).athletes||[]}catch(e){
+  try{ath=(await get(`${API}/teams/${id}?enable=roster`)).team.athletes||[]}catch(e2){}
+ }
+ if(ath.length&&ath[0].items)ath=ath.flatMap(g=>g.items);
+ const x=tm||{};
  let h=`<button class="back" onclick="view=null;render()">${t("back")}</button>
- <div class="card big"><img src="${x.logos?.[0]?.href||""}"><div><h2>${tn(x.abbreviation,x.displayName)}</h2><div style="color:#9ab">${x.record?.items?.[0]?.summary||""} · ${x.standingSummary||""}</div></div></div>
+ <div class="card big"><img src="${x.logos?.[0]?.href||""}"><div><h2>${tn(x.abbreviation,x.displayName||"")}</h2><div style="color:#9ab">${x.record?.items?.[0]?.summary||""} · ${x.standingSummary||""}</div></div></div>
  <div class="card"><b>${t("roster")}</b><div class="scroll"><table><tr><th></th><th>${t("pos")}</th><th>${t("age")}</th><th>${t("ht")}</th></tr>`+
- (r.athletes||[]).map(a=>`<tr onclick="openPlayer('${a.id}')" style="cursor:pointer"><td>#${a.jersey||"-"} ${a.fullName}</td><td>${lang==="zh"?(POSZH[a.position?.abbreviation]||a.position?.abbreviation):a.position?.abbreviation||""}</td><td>${a.age||""}</td><td>${a.displayHeight||""}</td></tr>`).join("")+`</table></div></div>`;
+ ath.map(a=>`<tr onclick="openPlayer('${a.id}')" style="cursor:pointer"><td>#${a.jersey||"-"} ${a.fullName}</td><td>${lang==="zh"?(POSZH[a.position?.abbreviation]||a.position?.abbreviation||""):a.position?.abbreviation||""}</td><td>${a.age||""}</td><td>${a.displayHeight||""}</td></tr>`).join("")+`</table></div></div>`;
  $.innerHTML=h;
 }
 function openPlayer(id){tab="players";view=id;render()}
@@ -180,10 +201,12 @@ function doSearch(v){
   }catch(e){res.innerHTML=`<div class="err">${t("err")}</div>`}
  },400);
 }
+const PL="https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/";
 async function pgPlayer(id){
- const [o,b]=await Promise.all([
-  get(`https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${id}/overview`),
-  get(`https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${id}`).catch(()=>null)]);
+ const [o,b,g]=await Promise.all([
+  get(`${PL}${id}/overview`).catch(()=>({})),
+  get(`${PL}${id}`).catch(()=>null),
+  get(`${PL}${id}/gamelog`).catch(()=>null)]);
  const a=b?.athlete||{};
  let h=`<button class="back" onclick="view=null;render()">${t("back")}</button>
  <div class="card big"><img src="${a.headshot?.href||""}"><div><h2>${a.displayName||""}</h2>
@@ -192,10 +215,33 @@ async function pgPlayer(id){
  const s=o.statistics;
  if(s){
   h+=`<div class="card"><b>${t("seasonStats")}</b><div class="scroll"><table><tr><th></th>${s.labels.map(l=>`<th>${l}</th>`).join("")}</tr>`+
-  s.splits.map(sp=>`<tr><td>${sp.displayName}</td>${sp.stats.map(v=>`<td>${v}</td>`).join("")}</tr>`).join("")+`</table></div></div>`;
+  s.splits.map(sp=>`<tr><td>${t(sp.displayName)}</td>${sp.stats.map(v=>`<td>${v}</td>`).join("")}</tr>`).join("")+`</table></div></div>`;
  }
- if(!s)h+=`<div class="card">${t("noresult")}</div>`;
+ h+=gameLogHtml(g);
  $.innerHTML=h;
+}
+function gameLogHtml(g){
+ const none=`<div class="card"><b>${t("gameLog")}</b><p style="margin-top6px;color:#9ab">${t("nolog")}</p></div>`;
+ if(!g||!g.labels||!g.events)return none;
+ const rows=[];
+ (g.seasonTypes||[]).forEach(stp=>{
+  if(/post|pre/i.test(stp.displayName||""))return;
+  (stp.categories||[]).forEach(cat=>{
+   (cat.events||[]).forEach(ev=>{
+    const meta=g.events[ev.eventId];if(meta)rows.push({meta,stats:ev.stats});
+   });
+  });
+ });
+ rows.sort((x,y)=>new Date(y.meta.gameDate||0)-new Date(x.meta.gameDate||0));
+ if(!rows.length)return none;
+ const loc=lang==="zh"?"zh-TW":"en-US";
+ return `<div class="card"><b>${t("gameLog")}</b><div class="scroll" style="margin-top:6px"><table><tr><th>${t("date")}</th><th>${t("opp")}</th><th>${t("result")}</th>${g.labels.map(l=>`<th>${l}</th>`).join("")}</tr>`+
+ rows.map(r=>{
+  const m=r.meta,d=new Date(m.gameDate);
+  const opp=m.opponent?tn(m.opponent.abbreviation,m.opponent.displayName):"";
+  const w=m.gameResult==="W";
+  return `<tr><td>${isNaN(d)?"":d.toLocaleDateString(loc,{month:"numeric",day:"numeric"})}</td><td>${m.atVs||""} ${opp}</td><td class="${w?"win":"lose"}">${m.gameResult||""} ${m.score||""}</td>${r.stats.map(v=>`<td>${v}</td>`).join("")}</tr>`;
+ }).join("")+`</table></div></div>`;
 }
 
 /* NEWS */
