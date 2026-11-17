@@ -39,6 +39,7 @@ a{color:#7cc4ff}
 .back{background:none;border:0;color:#7cc4ff;margin-bottom:8px;font-size:15px;cursor:pointer}
 .big{display:flex;align-items:center;gap:12px}
 .big img{width:70px;height:70px;border-radius:50%;background:#252c3d;object-fit:cover}
+.big img.logo{border-radius:0;background:none;object-fit:contain}
 .err{color:#f88;padding:20px;text-align:center}
 .err small{display:block;color:#a66;margin-top:6px}
 .win{color:#5f5}.lose{color:#f77}
@@ -62,7 +63,7 @@ en:{scores:"Scores",standings:"Standings",teams:"Teams",players:"Players",news:"
  "Regular Season":"Regular Season","Career":"Career"},
 zh:{scores:"比分",standings:"排名",teams:"球隊",players:"球員",news:"新聞",
  prev:"◀ 前一天",next:"後一天 ▶",loading:"載入中...",err:"資料載入失敗，請檢查網路。",
- nogame:"這天沒有比賽。",live:"進行中",final:"結束",back:"← 返回",search:"搜尋球員",
+ nogame:"這天沒有比賽。",live:"進行中",final:"結束",back:"← 返回",search:"搜尋球員（例如 LeBron）",
  east:"東區",west:"西區",team:"球隊",w:"勝",l:"敗",pct:"勝率",gb:"勝差",streak:"連勝/連敗",
  box:"球員數據",roster:"陣容",seasonStats:"賽季數據",gameLog:"本賽季逐場表現",pos:"位置",age:"年齡",ht:"身高",
  noresult:"找不到結果。",readmore:"閱讀全文",auto:"每 30 秒自動更新",tapNote:"點選比賽看詳細資料",
@@ -73,11 +74,12 @@ const TEAMZH={ATL:"老鷹",BOS:"塞爾提克",BKN:"籃網",CHA:"黃蜂",CHI:"公
 const POSZH={PG:"控球後衛",SG:"得分後衛",SF:"小前鋒",PF:"大前鋒",C:"中鋒",G:"後衛",F:"前鋒"};
 
 let lang=localStorage.getItem("nbaLang")||"en";
-let tab="scores",date=new Date(),timer=null,view=null,conf="east",boxIdx=0,gameData=null;
+let tab="scores",date=new Date(),timer=null,view=null,pview=null,conf="east",boxIdx=0,gameData=null,teamsCache=null;
 const t=k=>T[lang][k]||k;
 const tn=(abbr,name)=>lang==="zh"&&TEAMZH[abbr]?TEAMZH[abbr]:name;
 const API="https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 const STAND="https://site.api.espn.com/apis/v2/sports/basketball/nba/standings";
+const PL="https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/";
 const $=document.getElementById("app");
 
 async function get(u){const r=await fetch(u);if(!r.ok)throw new Error("HTTP "+r.status);return r.json()}
@@ -85,13 +87,13 @@ const ymd=d=>d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.get
 const showErr=e=>{$.innerHTML=`<div class="err">${t("err")}<small>${e&&e.message?e.message:""}</small></div>`};
 
 function toggleLang(){lang=lang==="en"?"zh":"en";localStorage.setItem("nbaLang",lang);document.documentElement.lang=lang==="zh"?"zh-Hant":"en";render()}
-function goHome(){tab="scores";view=null;boxIdx=0;date=new Date();render();window.scrollTo(0,0)}
+function goHome(){tab="scores";view=null;pview=null;boxIdx=0;date=new Date();render();window.scrollTo(0,0)}
 function drawNav(){
  const items=[["scores","🏀"],["standings","📊"],["teams","🛡️"],["players","👤"],["news","📰"]];
  document.getElementById("nav").innerHTML=items.map(([k,i])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${i}<br>${t(k)}</button>`).join("");
  document.getElementById("lang").textContent=lang==="en"?"中文":"English";
 }
-function go(k){tab=k;view=null;render()}
+function go(k){tab=k;view=null;pview=null;render()}
 function render(){
  clearInterval(timer);drawNav();
  $.innerHTML=`<div class="card">${t("loading")}</div>`;
@@ -168,39 +170,46 @@ async function pgStandings(){
 
 /* TEAMS */
 async function getTeams(){
+ if(teamsCache)return teamsCache;
+ let out=[];
  try{
   const d=await get(STAND);
-  const out=[];
-  (d.children||[]).forEach(c=>c.standings.entries.forEach(e=>out.push(e.team)));
-  if(out.length)return out;
+  (d.children||[]).forEach(c=>c.standings.entries.forEach(e=>{
+   out.push(Object.assign({},e.team,{_rec:(e.stats.find(s=>s.name==="wins")?.displayValue||"0")+"-"+(e.stats.find(s=>s.name==="losses")?.displayValue||"0")}));
+  }));
  }catch(e){}
- const d=await get(`${API}/teams`);
- return d.sports[0].leagues[0].teams.map(x=>x.team);
+ if(!out.length){
+  const d=await get(`${API}/teams`);
+  out=d.sports[0].leagues[0].teams.map(x=>x.team);
+ }
+ teamsCache=out;return out;
 }
+const logoOf=x=>x?.logos?.[0]?.href||(x?.abbreviation?`https://a.espncdn.com/i/teamlogos/nba/500/${x.abbreviation.toLowerCase()}.png`:"");
 async function pgTeams(){
+ if(pview)return pgPlayer(pview,true);
  if(view)return pgTeam(view);
- const ts=(await getTeams()).sort((a,b)=>(a.displayName||"").localeCompare(b.displayName||""));
- $.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">`+ts.map(x=>`<div class="card game" style="text-align:center" onclick="view='${x.id}';render()"><img src="${x.logos?.[0]?.href||""}" width="48"><div>${tn(x.abbreviation,x.displayName)}</div></div>`).join("")+`</div>`;
+ const ts=(await getTeams()).slice().sort((a,b)=>(a.displayName||"").localeCompare(b.displayName||""));
+ $.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">`+ts.map(x=>`<div class="card game" style="text-align:center" onclick="view='${x.id}';render()"><img src="${logoOf(x)}" width="48"><div>${tn(x.abbreviation,x.displayName)}</div></div>`).join("")+`</div>`;
 }
 async function pgTeam(id){
- let tm=null,ath=[];
- try{tm=(await get(`${API}/teams/${id}`)).team}catch(e){}
+ const list=await getTeams();
+ const x=list.find(z=>String(z.id)===String(id))||{};
+ let ath=[];
  try{ath=(await get(`${API}/teams/${id}/roster`)).athletes||[]}catch(e){
   try{ath=(await get(`${API}/teams/${id}?enable=roster`)).team.athletes||[]}catch(e2){}
  }
  if(ath.length&&ath[0].items)ath=ath.flatMap(g=>g.items);
- const x=tm||{};
  let h=`<button class="back" onclick="view=null;render()">${t("back")}</button>
- <div class="card big"><img src="${x.logos?.[0]?.href||""}"><div><h2>${tn(x.abbreviation,x.displayName||"")}</h2><div style="color:#9ab">${x.record?.items?.[0]?.summary||""} · ${x.standingSummary||""}</div></div></div>
+ <div class="card big"><img class="logo" src="${logoOf(x)}"><div><h2>${tn(x.abbreviation,x.displayName||"")}</h2><div style="color:#9ab">${x._rec||""}</div></div></div>
  <div class="card"><b>${t("roster")}</b><div class="scroll"><table><tr><th></th><th>${t("pos")}</th><th>${t("age")}</th><th>${t("ht")}</th></tr>`+
  ath.map(a=>`<tr onclick="openPlayer('${a.id}')" style="cursor:pointer"><td>#${a.jersey||"-"} ${a.fullName}</td><td>${lang==="zh"?(POSZH[a.position?.abbreviation]||a.position?.abbreviation||""):a.position?.abbreviation||""}</td><td>${a.age||""}</td><td>${a.displayHeight||""}</td></tr>`).join("")+`</table></div></div>`;
  $.innerHTML=h;
 }
-function openPlayer(id){tab="players";view=id;render()}
+function openPlayer(id){pview=id;render();window.scrollTo(0,0)}
 
 /* PLAYERS */
 async function pgPlayers(){
- if(view)return pgPlayer(view);
+ if(view)return pgPlayer(view,false);
  $.innerHTML=`<input id="q" placeholder="${t("search")}" oninput="doSearch(this.value)"><div id="res"></div>`;
 }
 let st;
@@ -215,14 +224,16 @@ function doSearch(v){
   }catch(e){res.innerHTML=`<div class="err">${t("err")}</div>`}
  },400);
 }
-const PL="https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/";
-async function pgPlayer(id){
+async function pgPlayer(id,fromTeam){
  const [o,b,g]=await Promise.all([
   get(`${PL}${id}/overview`).catch(()=>({})),
   get(`${PL}${id}`).catch(()=>null),
   get(`${PL}${id}/gamelog`).catch(()=>null)]);
  const a=b?.athlete||{};
- let h=`<button class="back" onclick="view=null;render()">${t("back")}</button>
+ let sched=null;
+ if(a.team?.id){sched=await get(`${API}/teams/${a.team.id}/schedule`).catch(()=>null)}
+ const backJs=fromTeam?"pview=null;render()":"view=null;render()";
+ let h=`<button class="back" onclick="${backJs}">${t("back")}</button>
  <div class="card big"><img src="${a.headshot?.href||""}"><div><h2>${a.displayName||""}</h2>
  <div style="color:#9ab">${a.team?tn(a.team.abbreviation,a.team.displayName):""} · #${a.jersey||"-"} · ${lang==="zh"?(POSZH[a.position?.abbreviation]||""):a.position?.displayName||""}</div>
  <div style="color:#9ab;font-size:13px">${a.displayHeight||""} · ${a.displayWeight||""} · ${a.age||""}</div></div></div>`;
@@ -231,21 +242,35 @@ async function pgPlayer(id){
   h+=`<div class="card"><b>${t("seasonStats")}</b><div class="scroll"><table><tr><th></th>${s.labels.map(l=>`<th>${l}</th>`).join("")}</tr>`+
   s.splits.map(sp=>`<tr><td>${t(sp.displayName)}</td>${sp.stats.map(v=>`<td>${v}</td>`).join("")}</tr>`).join("")+`</table></div></div>`;
  }
- h+=gameLogHtml(g,id);
+ h+=gameLogHtml(g,id,sched,a.team?.id);
  $.innerHTML=h;
  fillPM(id);
 }
-function gameLogHtml(g,pid){
+function gameLogHtml(g,pid,sched,teamId){
  const none=`<div class="card"><b>${t("gameLog")}</b><p style="margin-top:6px;color:#9ab">${t("nolog")}</p></div>`;
  if(!g||!g.labels||!g.events)return none;
- const rows=[];
+ const rows=[],seen=new Set();
  (g.seasonTypes||[]).forEach(stp=>{
   if(/post|pre/i.test(stp.displayName||""))return;
   (stp.categories||[]).forEach(cat=>{
    (cat.events||[]).forEach(ev=>{
-    const meta=g.events[ev.eventId];if(meta)rows.push({meta,stats:ev.stats,eventId:ev.eventId});
+    const meta=g.events[ev.eventId];
+    if(meta){rows.push({meta,stats:ev.stats,eventId:ev.eventId,dnp:false});seen.add(String(ev.eventId))}
    });
   });
+ });
+ (sched?.events||[]).forEach(e=>{
+  const c=e.competitions?.[0];
+  if(!c)return;
+  const done=e.status?.type?.completed??c.status?.type?.completed;
+  if(!done||seen.has(String(e.id)))return;
+  const me=c.competitors.find(x=>String(x.team.id)===String(teamId));
+  const op=c.competitors.find(x=>String(x.team.id)!==String(teamId));
+  if(!me||!op)return;
+  const ms=+(me.score?.displayValue??me.score),os=+(op.score?.displayValue??op.score);
+  const win=me.winner===true||ms>os;
+  rows.push({dnp:true,eventId:e.id,stats:g.labels.map(()=>"-"),
+   meta:{gameDate:e.date,atVs:me.homeAway==="away"?"@":"vs",opponent:op.team,gameResult:win?"W":"L",score:`${ms}-${os}`}});
  });
  rows.sort((x,y)=>new Date(y.meta.gameDate||0)-new Date(x.meta.gameDate||0));
  if(!rows.length)return none;
@@ -255,10 +280,9 @@ function gameLogHtml(g,pid){
   const m=r.meta,d=new Date(m.gameDate);
   const opp=m.opponent?tn(m.opponent.abbreviation,m.opponent.displayName):"";
   const w=m.gameResult==="W";
-  return `<tr><td>${isNaN(d)?"":d.toLocaleDateString(loc,{month:"numeric",day:"numeric"})}</td><td>${m.atVs||""} ${opp}</td><td class="${w?"win":"lose"}">${m.gameResult||""} ${m.score||""}</td>${r.stats.map(v=>`<td>${v}</td>`).join("")}<td class="pm" data-ev="${r.eventId}">…</td></tr>`;
+  return `<tr><td>${isNaN(d)?"":d.toLocaleDateString(loc,{month:"numeric",day:"numeric"})}</td><td>${m.atVs||""} ${opp}</td><td class="${w?"win":"lose"}">${m.gameResult||""} ${m.score||""}</td>${r.stats.map(v=>`<td>${v}</td>`).join("")}${r.dnp?`<td>-</td>`:`<td class="pm" data-ev="${r.eventId}">…</td>`}</tr>`;
  }).join("")+`</table></div></div>`;
 }
-
 const pmCache={};
 function findPM(d,pid){
  for(const tp of (d.boxscore?.players||[])){
