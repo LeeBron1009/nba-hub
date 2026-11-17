@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NBA Hub</title>
 <style>
-*{box-sizing:border-box;margin:0;font-family:system-ui,"Noto Sans TC",sans-serif}
+*{box-sizing:border-box;margin:0;font-family:system-ui,"Noto Sans TC",sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input{-webkit-user-select:text;user-select:text}
+img{-webkit-user-drag:none;user-drag:none}
 body{background:#10131a;color:#eee;padding-bottom:70px}
 header{position:sticky;top:0;background:#1b2130;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;z-index:5}
-header h1{font-size:18px}
+.home{display:flex;align-items:center;gap:6px;cursor:pointer}
+.home h1{font-size:18px}
 #lang{background:#c8102e;color:#fff;border:0;padding:6px 12px;border-radius:14px;font-weight:bold;cursor:pointer}
 main{padding:12px;max-width:700px;margin:auto}
 nav{position:fixed;bottom:0;left:0;right:0;background:#1b2130;display:flex;z-index:5}
@@ -39,11 +42,11 @@ a{color:#7cc4ff}
 .err{color:#f88;padding:20px;text-align:center}
 .err small{display:block;color:#a66;margin-top:6px}
 .win{color:#5f5}.lose{color:#f77}
-.top6{color:#ffd24d;font-weight:bold}.mid{color:#bcd}
+.top6{color:#22c55e;font-weight:bold}.mid{color:#38bdf8;font-weight:bold}
 </style>
 </head>
 <body>
-<header><h1>🏀 NBA Hub</h1><button id="lang" onclick="toggleLang()">中文</button></header>
+<header><div class="home" onclick="goHome()"><span style="font-size:20px">🏀</span><h1>NBA Hub</h1></div><button id="lang" onclick="toggleLang()">中文</button></header>
 <main id="app"></main>
 <nav id="nav"></nav>
 
@@ -70,7 +73,7 @@ const TEAMZH={ATL:"老鷹",BOS:"塞爾提克",BKN:"籃網",CHA:"黃蜂",CHI:"公
 const POSZH={PG:"控球後衛",SG:"得分後衛",SF:"小前鋒",PF:"大前鋒",C:"中鋒",G:"後衛",F:"前鋒"};
 
 let lang=localStorage.getItem("nbaLang")||"en";
-let tab="scores",date=new Date(),timer=null,view=null,conf="east";
+let tab="scores",date=new Date(),timer=null,view=null,conf="east",boxIdx=0,gameData=null;
 const t=k=>T[lang][k]||k;
 const tn=(abbr,name)=>lang==="zh"&&TEAMZH[abbr]?TEAMZH[abbr]:name;
 const API="https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
@@ -82,6 +85,7 @@ const ymd=d=>d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.get
 const showErr=e=>{$.innerHTML=`<div class="err">${t("err")}<small>${e&&e.message?e.message:""}</small></div>`};
 
 function toggleLang(){lang=lang==="en"?"zh":"en";localStorage.setItem("nbaLang",lang);document.documentElement.lang=lang==="zh"?"zh-Hant":"en";render()}
+function goHome(){tab="scores";view=null;boxIdx=0;date=new Date();render();window.scrollTo(0,0)}
 function drawNav(){
  const items=[["scores","🏀"],["standings","📊"],["teams","🛡️"],["players","👤"],["news","📰"]];
  document.getElementById("nav").innerHTML=items.map(([k,i])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${i}<br>${t(k)}</button>`).join("");
@@ -113,7 +117,7 @@ async function pgScores(){
    const tm=c.competitors.slice().sort((a,b)=>a.homeAway==="away"?-1:1).map(x=>`
     <div class="row"><div class="team"><img src="${x.team.logo||""}"><span>${tn(x.team.abbreviation,x.team.displayName)}</span><small style="color:#889">${x.records?.[0]?.summary||""}</small></div>
     <span class="sc">${s.state==="pre"?"":x.score}</span></div>`).join("");
-   return `<div class="card game" onclick="view='${e.id}';render()"><div class="st">${st}</div>${tm}</div>`}).join("");
+   return `<div class="card game" onclick="view='${e.id}';boxIdx=0;render()"><div class="st">${st}</div>${tm}</div>`}).join("");
   $.innerHTML=h;
  };
  await load();
@@ -121,20 +125,30 @@ async function pgScores(){
 }
 function shift(n){date.setDate(date.getDate()+n);render()}
 
-async function pgGame(id){
- const d=await get(`${API}/summary?event=${id}`);
+function drawGame(){
+ const d=gameData;
  let h=`<button class="back" onclick="view=null;render()">${t("back")}</button>`;
  const c=d.header?.competitions?.[0];
- if(c)h+=`<div class="card">`+c.competitors.map(x=>`<div class="row"><div class="team"><img src="${x.team.logos?.[0]?.href||""}"><b>${tn(x.team.abbreviation,x.team.displayName)}</b></div><span class="sc">${x.score||""}</span></div>`).join("")+`</div>`;
- (d.boxscore?.players||[]).forEach(tp=>{
-  const st=tp.statistics?.[0];if(!st)return;
-  const lab=st.labels;
-  h+=`<div class="card"><b>${tn(tp.team.abbreviation,tp.team.displayName)} · ${t("box")}</b><div class="scroll"><table><tr><th></th>${lab.map(l=>`<th>${l}</th>`).join("")}</tr>`+
+ if(c)h+=`<div class="card">`+c.competitors.slice().sort((a,b)=>a.homeAway==="away"?-1:1).map(x=>`<div class="row"><div class="team"><img src="${x.team.logos?.[0]?.href||""}"><b>${tn(x.team.abbreviation,x.team.displayName)}</b></div><span class="sc">${x.score||""}</span></div>`).join("")+`</div>`;
+ const pl=d.boxscore?.players||[];
+ if(pl.length){
+  if(boxIdx>=pl.length)boxIdx=0;
+  h+=`<div class="tabs">`+pl.map((tp,i)=>`<button class="${i===boxIdx?"on":""}" onclick="boxIdx=${i};drawGame()">${tn(tp.team.abbreviation,tp.team.shortDisplayName||tp.team.displayName)}</button>`).join("")+`</div>`;
+  const tp=pl[boxIdx],st=tp.statistics?.[0];
+  if(st){
+   const lab=st.labels;
+   h+=`<div class="card"><b>${tn(tp.team.abbreviation,tp.team.displayName)} · ${t("box")}</b><div class="scroll"><table><tr><th></th>${lab.map(l=>`<th>${l}</th>`).join("")}</tr>`+
    st.athletes.map(a=>`<tr><td>${a.athlete.shortName}</td>${(a.stats.length?a.stats:lab.map(()=>"-")).map(v=>`<td>${v}</td>`).join("")}</tr>`).join("")+`</table></div></div>`;
- });
- if(!d.boxscore?.players?.length)h+=`<div class="card">${t("nogame")}</div>`;
+  }
+ }else h+=`<div class="card">${t("nogame")}</div>`;
  $.innerHTML=h;
- timer=setInterval(()=>{if(tab==="scores"&&view)pgGame(view).catch(()=>{})},30000);
+}
+async function pgGame(id){
+ gameData=await get(`${API}/summary?event=${id}`);
+ drawGame();
+ timer=setInterval(async()=>{
+  if(tab==="scores"&&view){try{gameData=await get(`${API}/summary?event=${view}`);drawGame()}catch(e){}}
+ },30000);
 }
 
 /* STANDINGS */
@@ -221,7 +235,7 @@ async function pgPlayer(id){
  $.innerHTML=h;
 }
 function gameLogHtml(g){
- const none=`<div class="card"><b>${t("gameLog")}</b><p style="margin-top6px;color:#9ab">${t("nolog")}</p></div>`;
+ const none=`<div class="card"><b>${t("gameLog")}</b><p style="margin-top:6px;color:#9ab">${t("nolog")}</p></div>`;
  if(!g||!g.labels||!g.events)return none;
  const rows=[];
  (g.seasonTypes||[]).forEach(stp=>{
