@@ -155,6 +155,7 @@ function drawGame(){
   else body=playsHtml(d,away,home);
  }catch(e){body=`<div class="card">${gl("nodata")}</div>`}
  $.innerHTML=h+body;
+ if(gameTab==="prob"||gameTab==="flow")chartSet(gameTab,-1);
 }
 async function pgGame(id){
  gameData=await get(`${API}/summary?event=${id}`);
@@ -195,52 +196,89 @@ function teamStatsHtml(d,away,home){
  return h+`</div>`;
 }
 
-function periodMap(d){const m={};(d.plays||[]).forEach(p=>{m[p.id]=p.period?.number||0});return m}
+/* CHARTS */
+const CH={};
+const pq=n=>n<=4?"Q"+n:"OT"+(n-4);
 function dividers(per,n,W,H){
  let s="",last=per[0];
  per.forEach((p,i)=>{
-  if(p!==last){const x=i/(n-1)*W;s+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#3a4560" stroke-dasharray="3,3"/><text x="${x+3}" y="${H-4}" fill="#889" font-size="10">${p<=4?"Q"+p:"OT"}</text>`;last=p}
+  if(p!==last){const x=i/(n-1)*W;s+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#3a4560" stroke-dasharray="3,3"/><text x="${x+3}" y="${H-4}" fill="#889" font-size="10">${pq(p)}</text>`;last=p}
  });
- return `<text x="3" y="${H-4}" fill="#889" font-size="10">Q${per[0]||1}</text>`+s;
+ return `<text x="3" y="${H-4}" fill="#889" font-size="10">${pq(per[0]||1)}</text>`+s;
+}
+function chartSet(key,i){
+ const c=CH[key];if(!c)return;
+ const n=c.items.length;
+ if(i<0||i>=n)i=n-1;
+ const it=c.items[i],x=n>1?i/(n-1)*c.W:0;
+ const mk=document.getElementById("mk-"+key);
+ if(mk){mk.setAttribute("x1",x);mk.setAttribute("x2",x)}
+ const dA=document.getElementById("dA-"+key),dB=document.getElementById("dB-"+key);
+ if(key==="prob"){
+  if(dB){dB.setAttribute("cx",x);dB.setAttribute("cy",(1-it.hp)*c.H)}
+ }else{
+  if(dA){dA.setAttribute("cx",x);dA.setAttribute("cy",c.H-it.as/c.mx*c.H)}
+  if(dB){dB.setAttribute("cx",x);dB.setAttribute("cy",c.H-it.hs/c.mx*c.H)}
+ }
+ const info=document.getElementById("info-"+key);
+ if(!info)return;
+ const head=key==="prob"
+  ?`<div class="row"><b style="color:${C_AWAY}">${c.an} ${((1-it.hp)*100).toFixed(1)}%</b><b style="color:${C_HOME}">${c.hn} ${(it.hp*100).toFixed(1)}%</b></div>`
+  :`<div class="row"><b style="color:${C_AWAY}">${c.an} <span class="sc">${it.as}</span></b><b style="color:${C_HOME}"><span class="sc">${it.hs}</span> ${c.hn}</b></div>`;
+ info.innerHTML=head+`<div style="color:#889;font-size:12px">${it.per?pq(it.per):""} ${it.clock||""} · ${it.as} - ${it.hs}</div><div style="font-size:13px;color:#cde;min-height:18px">${it.text||""}</div>`;
+}
+function chartTouch(e,key){
+ const c=CH[key];if(!c)return;
+ const r=e.currentTarget.getBoundingClientRect();
+ let f=(e.clientX-r.left)/r.width;f=Math.max(0,Math.min(1,f));
+ chartSet(key,Math.round(f*(c.items.length-1)));
+}
+function chartSvg(key,inner){
+ return `<svg viewBox="0 0 ${CH[key].W} ${CH[key].H}" style="width:100%;background:#141a27;border-radius:8px;margin-top:6px;touch-action:pan-y;cursor:crosshair"
+  onpointerdown="chartTouch(event,'${key}')" onpointermove="chartTouch(event,'${key}')">${inner}
+  <line id="mk-${key}" x1="0" y1="0" x2="0" y2="${CH[key].H}" stroke="#fff" stroke-width="1.5" opacity=".7"/>
+  ${key==="flow"?`<circle id="dA-flow" r="5" fill="${C_AWAY}" stroke="#fff" stroke-width="1.5"/>`:""}
+  <circle id="dB-${key}" r="5" fill="${C_HOME}" stroke="#fff" stroke-width="1.5"/></svg>`;
 }
 function probHtml(d,away,home){
  const wp=d.winprobability||[];
  if(wp.length<2)return `<div class="card">${gl("nodata")}</div>`;
- const W=600,H=220,n=wp.length,pm=periodMap(d);
+ const W=600,H=220,n=wp.length;
+ const pById={};(d.plays||[]).forEach(p=>{pById[p.id]=p});
+ const items=wp.map(w=>{const p=pById[w.playId]||{};
+  return {hp:w.homeWinPercentage,per:p.period?.number,clock:p.clock?.displayValue,text:p.text,as:p.awayScore??"-",hs:p.homeScore??"-"}});
+ CH.prob={W,H,items,an:tn(away.team.abbreviation,away.team.displayName),hn:tn(home.team.abbreviation,home.team.displayName)};
  const pts=wp.map((w,i)=>`${(i/(n-1)*W).toFixed(1)},${((1-w.homeWinPercentage)*H).toFixed(1)}`).join(" ");
- const last=wp[n-1].homeWinPercentage*100;
- return `<div class="card"><b>${gl("winp")}</b>
- <div class="row" style="margin-top:6px"><span style="color:${C_AWAY}">${tn(away.team.abbreviation,away.team.displayName)} ${(100-last).toFixed(1)}%</span><span style="color:${C_HOME}">${tn(home.team.abbreviation,home.team.displayName)} ${last.toFixed(1)}%</span></div>
- <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:#141a27;border-radius:8px;margin-top:6px">
- ${dividers(wp.map(w=>pm[w.playId]||1),n,W,H)}
- <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="#667"/>
- <polyline points="${pts}" fill="none" stroke="${C_HOME}" stroke-width="2"/></svg></div>`;
+ const inner=`${dividers(items.map(x=>x.per||1),n,W,H)}
+  <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="#667"/>
+  <polyline points="${pts}" fill="none" stroke="${C_HOME}" stroke-width="2"/>`;
+ return `<div class="card"><b>${gl("winp")}</b><div id="info-prob" style="margin-top:6px"></div>${chartSvg("prob",inner)}</div>`;
 }
 function flowHtml(d,away,home){
  const ps=(d.plays||[]).filter(p=>p.homeScore!==undefined);
  if(ps.length<2)return `<div class="card">${gl("nodata")}</div>`;
  const W=600,H=220,n=ps.length,mx=Math.max(...ps.map(p=>Math.max(p.homeScore,p.awayScore)),10);
+ const items=ps.map(p=>({as:p.awayScore,hs:p.homeScore,per:p.period?.number,clock:p.clock?.displayValue,text:p.text}));
+ CH.flow={W,H,mx,items,an:tn(away.team.abbreviation,away.team.displayName),hn:tn(home.team.abbreviation,home.team.displayName)};
  const line=k=>ps.map((p,i)=>`${(i/(n-1)*W).toFixed(1)},${(H-p[k]/mx*H).toFixed(1)}`).join(" ");
- const lp=ps[n-1];
- return `<div class="card"><div class="row"><div><b style="color:${C_AWAY}">${tn(away.team.abbreviation,away.team.displayName)}</b><div class="sc">${lp.awayScore}</div></div>
- <div style="text-align:right"><b style="color:${C_HOME}">${tn(home.team.abbreviation,home.team.displayName)}</b><div class="sc">${lp.homeScore}</div></div></div>
- <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:#141a27;border-radius:8px;margin-top:6px">
- ${dividers(ps.map(p=>p.period?.number||1),n,W,H)}
- <polyline points="${line("awayScore")}" fill="none" stroke="${C_AWAY}" stroke-width="2"/>
- <polyline points="${line("homeScore")}" fill="none" stroke="${C_HOME}" stroke-width="2"/></svg></div>`;
+ const inner=`${dividers(ps.map(p=>p.period?.number||1),n,W,H)}
+  <polyline points="${line("awayScore")}" fill="none" stroke="${C_AWAY}" stroke-width="2"/>
+  <polyline points="${line("homeScore")}" fill="none" stroke="${C_HOME}" stroke-width="2"/>`;
+ return `<div class="card"><div id="info-flow"></div>${chartSvg("flow",inner)}</div>`;
 }
+
 function playsHtml(d,away,home){
  const all=d.plays||[];
  if(!all.length)return `<div class="card">${gl("nodata")}</div>`;
  const periods=[...new Set(all.map(p=>p.period?.number||1))];
  let h=`<div class="tabs sub"><button class="${playQ===0?"on":""}" onclick="playQ=0;drawGame()">${gl("all")}</button>`+
-  periods.map(q=>`<button class="${playQ===q?"on":""}" onclick="playQ=${q};drawGame()">${q<=4?"Q"+q:"OT"+(q-4)}</button>`).join("")+`</div>`;
+  periods.map(q=>`<button class="${playQ===q?"on":""}" onclick="playQ=${q};drawGame()">${pq(q)}</button>`).join("")+`</div>`;
  const logos={};[away,home].forEach(x=>{logos[x.team.id]=x.team.logos?.[0]?.href||""});
  const list=all.filter(p=>playQ===0||(p.period?.number||1)===playQ).slice().reverse();
  h+=`<div class="card">`+list.map(p=>`<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid #252c3d">
   <img src="${logos[p.team?.id]||""}" width="24" height="24" style="flex:none;${logos[p.team?.id]?"":"visibility:hidden"}">
   <div style="flex:1"><div class="row"><b>${p.type?.text||""}</b>${p.scoringPlay?`<b>${p.awayScore} - ${p.homeScore}</b>`:""}</div>
-  <div style="color:#889;font-size:12px">${p.clock?.displayValue||""} · ${(p.period?.number||1)<=4?"Q"+(p.period?.number||1):"OT"}</div>
+  <div style="color:#889;font-size:12px">${p.clock?.displayValue||""} · ${pq(p.period?.number||1)}</div>
   <div style="font-size:13px;color:#cde">${p.text||""}</div></div></div>`).join("")+`</div>`;
  return h;
 }
